@@ -7,11 +7,11 @@ CHOKE 1.0.rmd was programed in 2023.06.0 Build 421 (RStudio Team, 2020), by Kirs
 ***NOTE: Code runs best chunk by chunk. Do not Run All.
 
 CHOKE folder contains: 
-•	/CHOKE 1.0.rmd
-•	/Data_In
-•	/Data_Out
-•	/Figures
-•	/Stats
+	/CHOKE 1.0.rmd
+ /Data_In
+ /Data_Out
+ /Figures
+ /Stats
 
 
 FILE AND FOLDER DESCRIPTIONS
@@ -47,8 +47,7 @@ CHOKE_1_Data_Clean
 •	3. Test Type: Baseline or Post-Injury.  
 •	3. Duration (sec): Time it took participant to complete Test 3, in seconds.
 •	3. Errors: Number of errors in Test 3.
-•	3. Baseline when run (sec): Best baseline time out of all baseline tests for 
- that participant, in seconds. 
+•	3. Baseline when run (sec): Best baseline time out of all baseline tests for that participant, in seconds. 
 •	3. Card 1 Duration (sec): Time to complete Card 1 from Test 3, in seconds.
 •	3. Card 2 Duration (sec): Time to complete Card 2 from Test 3, in seconds.
 •	3. Card 3 Duration (sec): Time to complete Card 3 from Test 3, in seconds.
