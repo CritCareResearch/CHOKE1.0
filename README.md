@@ -7,7 +7,7 @@ CHOKE 1.0.rmd was programed in 2023.06.0 Build 421 (RStudio Team, 2020), by Kirs
 ***NOTE: Code runs best chunk by chunk. Do not Run All.
 
 CHOKE folder contains: 
-	/CHOKE 1.0.rmd
+ /CHOKE 1.0.rmd
  /Data_In
  /Data_Out
  /Figures
@@ -25,9 +25,9 @@ File name (.csv)	and variables included
 
 CHOKE_1_Data_Clean	
 
-•	Internal Id: random ID.
+ Internal Id: random ID.
 
-•	First name: Anonymized first name.
+First name: Anonymized first name.
 
 •	Last name: Anonymized last name.
 
