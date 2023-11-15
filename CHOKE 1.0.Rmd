@@ -1,0 +1,840 @@
+---
+title: "CHOKE 1.0"
+author: "Kirsten A. Dalrymple"
+date: "11/15/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+# Open libraries
+library(gridExtra)
+library(tidyverse)
+library(broom)
+library(emmeans)
+library(corrr)
+library(here)
+library(ggpubr)
+library(psych)
+library(lavaan)
+library(ppcor)
+library(gtsummary)
+library(gplots)
+```
+
+#Clean data
+```{r setup, include=FALSE}
+# read in data
+rawdata <- read.csv("Data_In/CHOKE_1_Data_Clean.csv")
+
+data <- rawdata %>% 
+   dplyr::select(Internal.Id,
+          First.Name,
+          Teams,
+          Age,
+          Belt,
+          Experience,
+          Baseline..sec.,
+          X1..Test.Type,
+          X1..Duration..sec.,
+          X1..Errors,
+          X1..Card.1.Duration..sec.,
+          X1..Card.2.Duration..sec.,
+          X1..Card.3.Duration..sec.,
+          X2..Test.Type,
+          X2..Duration..sec.,
+          X2..Errors,
+          X2..Card.1.Duration..sec.,
+          X2..Card.2.Duration..sec.,
+          X2..Card.3.Duration..sec.,
+          X3..Test.Type,
+          X3..Baseline.when.run..sec.,
+          X3..Duration..sec.,
+          X3..Errors,
+          X3..Card.1.Duration..sec.,
+          X3..Card.2.Duration..sec.,
+          X3..Card.3.Duration..sec.,
+          X4..Test.Type,
+          X4..Baseline.when.run..sec.,
+          X4..Duration..sec.,
+          X4..Errors,
+          X4..Card.1.Duration..sec.,
+          X4..Card.2.Duration..sec.,
+          X4..Card.3.Duration..sec.,
+         
+                      ) 
+ 
+
+data_new <-  data %>%
+  separate(Teams, c("Submission", "Gender"), ", ") %>% 
+  filter(Submission != 'Did not submit')
+
+#rename variables to make the names more meaningful and easier to remember.
+  
+data_clean <- data_new %>% 
+rename("BestTimeAllTests" = Baseline..sec.,
+       "BestBaselineTime" = X3..Baseline.when.run..sec.,
+       "Base1_Type" = X1..Test.Type,
+       "Base1_TotalTime" = X1..Duration..sec.,
+       "Base1_NumErrors" = X1..Errors,
+       "Base1_Card1Time" = X1..Card.1.Duration..sec.,
+       "Base1_Card2Time" = X1..Card.2.Duration..sec.,
+       "Base1_Card3Time" = X1..Card.3.Duration..sec.,
+       "Base2_Type" = X2..Test.Type,
+       "Base2_TotalTime" = X2..Duration..sec.,
+       "Base2_NumErrors" = X2..Errors,
+       "Base2_Card1Time" = X2..Card.1.Duration..sec.,
+       "Base2_Card2Time" = X2..Card.2.Duration..sec.,
+       "Base2_Card3Time" = X2..Card.3.Duration..sec.,
+       "PT1_Type" = X3..Test.Type,
+       "PT1_TotalTime" =  X3..Duration..sec.,
+       "PT1_NumErrors" =  X3..Errors,
+       "PT1_Card1Time" =  X3..Card.1.Duration..sec.,
+       "PT1_Card2Time" =  X3..Card.2.Duration..sec.,
+       "PT1_Card3Time" = X3..Card.3.Duration..sec.,
+       "PT2_Type" = X4..Test.Type,
+       "PT2_BestBaselineTime" = X4..Baseline.when.run..sec.,
+       "PT2_TotalTime" = X4..Duration..sec.,
+       "PT2_NumErrors" =  X4..Errors,
+       "PT2_Card1Time" =  X4..Card.1.Duration..sec.,
+       "PT2_Card2Time" = X4..Card.2.Duration..sec.,
+       "PT2_Card3Time" = X4..Card.3.Duration..sec.
+       ) %>% 
+  mutate("Base1MeanTime" = ((Base1_Card1Time + Base1_Card2Time + Base1_Card3Time)/3),
+         "Base2MeanTime" = ((Base2_Card1Time + Base2_Card2Time + Base2_Card3Time)/3),
+         "PT1MeanTime" = ((PT1_Card1Time + PT1_Card2Time + PT1_Card3Time)/3),
+         "PT2MeanTime" = ((PT2_Card1Time + PT2_Card2Time + PT2_Card3Time)/3)
+         )
+         
+
+```
+## Basic demographics
+
+```{r}
+gender <- data_clean %>% 
+  group_by(Submission) %>% 
+  count(Gender)
+
+write.csv(gender, "Data_Out/Demographics_Gender.csv", row.names = FALSE)
+
+belt <- data_clean %>% 
+  group_by(Submission) %>% 
+  count(Belt)
+
+write.csv(belt, "Data_Out/Demographics_Belt.csv", row.names = FALSE)
+
+age <- data_clean %>% 
+  group_by(Submission) %>% 
+  summarize(n=n(),
+            Age_mean = mean(Age, na.rm=TRUE),
+            Age_sd = sd(Age, na.rm=TRUE),
+            Age_se = Age_sd/(sqrt(n))
+            )
+write.csv(age, "Data_Out/Demographics_Age.csv", row.names = FALSE)
+
+experience <- data_clean %>% 
+  group_by(Submission) %>% 
+  summarize(n=n(),
+            Experience_mean = mean(Experience, na.rm=TRUE),
+            Experience_sd = sd(Experience, na.rm=TRUE),
+            Experience_se = Experience_sd/(sqrt(n))
+            )
+write.csv(experience, "Data_Out/Demographics_Experience.csv", row.names = FALSE)
+
+
+error_countPT1 <-  data_clean %>% 
+  group_by(Submission) %>% 
+  count(PT1_NumErrors)
+
+error_countPT2 <-  data_clean %>% 
+  group_by(Submission) %>% 
+  count(PT2_NumErrors)
+```
+
+
+
+### REDCAP 11 Failed first two baselines for not saying numbers outloud
+### REDCAP 18 Failed 2nd baseline for making 1 error
+### REDCAP 44 Failed 1st baseline for missing 1 card
+
+```{r setup, include=FALSE}
+# DESCRIPTIVE STATS
+
+TotalTime_summary <- data_clean %>% 
+  group_by(Submission) %>% 
+  summarize(n=n(),
+            BestBaselineTime_mean = mean(BestBaselineTime, na.rm=TRUE),
+            BestBaselineTime_sd = sd(BestBaselineTime, na.rm=TRUE),
+            BestBaselineTime_se = BestBaselineTime_sd/(sqrt(n)),
+            Base1_mean = mean(Base1_TotalTime, na.rm=TRUE),
+            Base1_sd = sd(Base1_TotalTime, na.rm=TRUE),
+            Base1_se = Base1_sd/(sqrt(n)),
+            Base2_mean = mean(Base2_TotalTime, na.rm=TRUE),
+            Base2_sd = sd(Base2_TotalTime, na.rm=TRUE),
+            Base2_se = Base2_sd/(sqrt(n)),
+            PT1_mean = mean(PT1_TotalTime, na.rm=TRUE),
+            PT1_sd = sd(PT1_TotalTime, na.rm=TRUE),
+            PT1_se = PT1_sd/(sqrt(n)),
+            PT2_mean = mean(PT2_TotalTime, na.rm=TRUE),
+            PT2_sd = sd(PT2_TotalTime, na.rm=TRUE),
+            PT2_se = PT2_sd/(sqrt(n))
+            ) 
+
+TotalTime_summary_long <- TotalTime_summary %>% 
+  pivot_longer(cols = BestBaselineTime_mean:PT2_se, 
+               names_to = "Test", 
+               values_to = "Time")
+
+#Filter to make a table with just means, just SD, and just SE and then join them
+
+
+
+TotalTime_summary_means <- TotalTime_summary_long %>% 
+  filter(grepl("mean", Test)) %>%  #filter tests with the word mean in the name 
+  rename("Mean" = Time)
+TotalTime_summary_means$Test <- gsub("_mean","", TotalTime_summary_means$Test) #take "_mean" out of the test name
+
+#Repeat for SD and SE
+         
+TotalTime_summary_sds <- TotalTime_summary_long %>% 
+  filter(grepl("sd", Test)) %>%  #filter tests with the word sd in the name 
+  rename("sd" = Time)
+TotalTime_summary_sds$Test <- gsub("_sd","", TotalTime_summary_sds$Test) #take "_sd" out of the test name
+TotalTime_summary_sds <- TotalTime_summary_sds %>% 
+  dplyr::select(Submission,
+                Test,
+                sd)
+
+TotalTime_summary_ses <- TotalTime_summary_long %>% 
+  filter(grepl("_se", Test)) %>%  #filter tests with the word sd in the name 
+  rename("se" = Time)
+TotalTime_summary_ses$Test <- gsub("_se","", TotalTime_summary_ses$Test) #take "_se" out of the test name
+TotalTime_summary_ses <- TotalTime_summary_ses %>% 
+  dplyr::select(Submission,
+                Test,
+                se)
+
+TotalTime_summary_clean <- merge(
+  TotalTime_summary_means,TotalTime_summary_sds,  by=c("Submission", "Test"))
+TotalTime_summary_clean <- merge(
+  TotalTime_summary_clean, TotalTime_summary_ses, by=c("Submission", "Test"))
+
+
+write.csv(TotalTime_summary_clean, "Data_Out/TotalTime_summary.csv", row.names = FALSE)
+
+# Repeat with Errors
+
+Errors_summary <- data_clean %>% 
+  group_by(Submission) %>% 
+  summarize(n=n(),
+            Base1_mean = mean(Base1_NumErrors, na.rm=TRUE),
+            Base1_sd = sd(Base1_NumErrors, na.rm=TRUE),
+            Base1_se = Base1_sd/(sqrt(n)),
+            Base2_mean = mean(Base2_NumErrors, na.rm=TRUE),
+            Base2_sd = sd(Base2_NumErrors, na.rm=TRUE),
+            Base2_se = Base2_sd/(sqrt(n)),
+            PT1_mean = mean(PT1_NumErrors, na.rm=TRUE),
+            PT1_sd = sd(PT1_NumErrors, na.rm=TRUE),
+            PT1_se = PT1_sd/(sqrt(n)),
+            PT2_mean = mean(PT2_NumErrors, na.rm=TRUE),
+            PT2_sd = sd(PT2_NumErrors, na.rm=TRUE),
+            PT2_se = PT2_sd/(sqrt(n))
+            ) 
+
+Errors_summary_long <- Errors_summary %>% 
+  pivot_longer(cols = Base1_mean:PT2_se, 
+               names_to = "Test", 
+               values_to = "Time")
+
+#Make a table with just means, just SD, and just SE and then join them
+
+Errors_summary_means <- Errors_summary_long %>% 
+  filter(grepl("mean", Test)) %>%  #filter tests with the word mean in the name 
+  rename("Mean" = Time)
+Errors_summary_means$Test <- gsub("_mean","", Errors_summary_means$Test) #take "_mean" out of the test name
+
+#Repeat for SD and SE
+         
+Errors_summary_sds <- Errors_summary_long %>% 
+  filter(grepl("sd", Test)) %>%  #filter tests with the word sd in the name 
+  rename("sd" = Time)
+Errors_summary_sds$Test <- gsub("_sd","", Errors_summary_sds$Test) #take "_sd" out of the test name
+Errors_summary_sds <- Errors_summary_sds %>% 
+  dplyr::select(Submission,
+                Test,
+                sd)
+
+Errors_summary_ses <- Errors_summary_long %>% 
+  filter(grepl("_se", Test)) %>%  #filter tests with the word sd in the name 
+  rename("se" = Time)
+Errors_summary_ses$Test <- gsub("_se","", Errors_summary_ses$Test) #take "_se" out of the test name
+Errors_summary_ses <- Errors_summary_ses %>% 
+  dplyr::select(Submission,
+                Test,
+                se)
+
+Errors_summary_clean <- merge(
+  Errors_summary_means,Errors_summary_sds,  by=c("Submission", "Test"))
+Errors_summary_clean <- merge(
+  Errors_summary_clean, Errors_summary_ses, by=c("Submission", "Test"))
+
+write.csv(Errors_summary_clean, "Data_Out/Error_summary.csv", row.names = FALSE)
+```
+
+#Visualizations
+
+```{r}
+
+Plot_Time <- TotalTime_summary_clean %>% 
+  group_by(Submission) %>% 
+  filter(Test!="BestBaselineTime") %>% 
+  ggplot(aes(x=Submission, y=Mean, fill = Test))+
+        geom_col(stat="identity", width=0.5, position = "dodge")+
+        geom_errorbar(aes(ymin=Mean-se, ymax=Mean+se), width=.2, position = position_dodge(0.5))+
+        scale_fill_manual(values = c("steelblue3", 
+                                     "slategray2", 
+                                     "indianred3", 
+                                     "rosybrown1"),
+                          labels = c("Baseline 1", 
+                                     "Baseline 2", 
+                                     "Post-Test 1", 
+                                     "Post-Test 2")) +
+        ylim(c(0,70))+
+        xlab("Submission type")+
+        ylab ("Mean time (seconds)")+
+        labs(title="Mean Time in Seconds by Submission Type and Test")+ 
+        theme(plot.title = element_text(hjust = 0.5)
+                        )
+
+Plot_Time
+
+ggsave(plot = Plot_Time, "Figures/Time.pdf", device = "pdf")
+
+# Repeat for errors
+
+Plot_errors <- Errors_summary_clean %>% 
+  group_by(Submission) %>% 
+  ggplot(aes(x=Submission, y=Mean, fill = Test))+
+        geom_col(stat="identity", width=0.5, position = "dodge")+
+        geom_errorbar(aes(ymin=Mean-se, ymax=Mean+se), width=.2, position = position_dodge(0.5))+
+        scale_fill_manual(values = c("steelblue3", 
+                                     "slategray2", 
+                                     "indianred3", 
+                                     "rosybrown1"),
+                          labels = c("Baseline 1", 
+                                     "Baseline 2", 
+                                     "Post-Test 1", 
+                                     "Post-Test 2")) +
+        ylim(c(-1,1))+
+        xlab("Submission type")+
+        ylab ("Mean number of errors")+
+        labs(title="Number of Errors by Submission Type and Test")+ 
+        theme(plot.title = element_text(hjust = 0.5)
+                        )
+
+Plot_errors
+
+ggsave(plot = Plot_Time, "Figures/Time.pdf", device = "pdf")
+```
+
+#SUMMARIZE PASS VS FAIL USING RT AND ERRORS.
+##According to King Devick, a fail is Post Test RT > 1 sec above fastest baseline OR an error.
+
+```{r}
+# new analysis. Take the post-test 1 and subtract the FASTEST baseline. if greater than 1 sec then = fail. Also, anyone with 1 or more errors is a fail. Calculate fails per group. Count if > 1 to quantify number of participants who failed
+
+# Use "3. Baseline when run (sec)", which is the fastest of the two baselines. 
+# for errors, script will look at "if errors !=0". It doesn't matter how many errors because any error is a fail.
+
+data2 <- data_clean %>% 
+  dplyr::select(Internal.Id,
+                Submission,
+                Gender,
+                BestBaselineTime,
+                PT1_TotalTime,
+                PT1_NumErrors,
+                PT2_TotalTime,
+                PT2_NumErrors) %>% 
+  mutate(PT1_TimeDiff = PT1_TotalTime - BestBaselineTime,
+         PT2_TimeDiff = PT2_TotalTime - BestBaselineTime
+         )
+ 
+TimeDifference_summary <- data2 %>% 
+  group_by(Submission) %>% 
+  summarize(n=n(),
+            PT1_mean = mean(PT1_TimeDiff, na.rm=TRUE),
+            PT1_sd = sd(PT1_TimeDiff, na.rm=TRUE),
+            PT1_se = PT1_sd/(sqrt(n)),
+            PT2_mean = mean(PT2_TimeDiff, na.rm=TRUE),
+            PT2_sd = sd(PT2_TimeDiff, na.rm=TRUE),
+            PT2_se = PT2_sd/(sqrt(n))
+            ) 
+
+write.csv(TimeDifference_summary, "Data_Out/IndividualDiff_Summary.csv", row.names = FALSE)
+
+# Quantify # of people in each group who are > 1 sec above baseline and > 0 errors
+
+#First create variables that gives 1s to fails and 0s to passes
+PassFail1 <- data2 %>% 
+  mutate(PT1ResultTime =ifelse(PT1_TimeDiff < 1, 0, 1),
+         PT1ResultError = ifelse(PT1_NumErrors > 1, 1, 0),
+         PT2ResultTime =ifelse(PT2_TimeDiff < 1, 0, 1),
+         PT2ResultError = ifelse(PT2_NumErrors > 1, 1, 0)
+         )
+# Next create a variable that includes all fail types (time > 1 sec above baseline OR any errors). A fail is > 1 sec above baseline OR errors > 1. Add PT1ResultTime + PT1ResultError. Then create a pass/fail where pass is only people who have a 0. People who have only a Time fail OR only an Errors fail will have a score of 1. Anyone who failed in terms of Time AND errors will have a score of 2.
+
+PassFail2 <- PassFail1 %>% 
+  mutate(PT1TimePlusError = PT1ResultTime + PT1ResultError,
+         PT2TimePlusError = PT2ResultTime + PT2ResultError
+         )
+
+# Create a new variable that labels them as simply Pass or Fail, where Pass is anyone with a 0 and Fail is anyone with a score > 0.
+PassFail3 <- PassFail2 %>% 
+  mutate(PT1PassFail = ifelse(PT1TimePlusError > 0, "Fail", "Pass"),
+         PT2PassFail = ifelse(PT2TimePlusError > 0, "Fail", "Pass")
+         )
+
+#PT1 = post test 1, PT2 = post test 2
+
+PT1PassFail_summary <- PassFail3 %>% 
+  group_by(Submission) %>% 
+  count(PT1PassFail)
+
+PT2PassFail_summary <- PassFail3 %>% 
+  group_by(Submission) %>% 
+  count(PT2PassFail)
+
+
+
+
+```
+
+# Visualizations 
+```{r}
+
+# Make a scatter plot of time differences.
+###### POST TEST 1 ######
+Plot_TimeDiffPT1 <- PassFail3 %>% 
+  group_by(Submission) %>% 
+  ggplot(aes(x=Submission, y=PT1_TimeDiff, colour=Submission, shape = Submission))+
+        geom_point(stat="identity", width=0.5, position = "jitter")+
+        geom_hline(yintercept=0, linetype="solid", 
+                color = "black", size=0.5)+
+        ylim(c(-20,20))+
+        xlab("Submission type")+
+        ylab ("Time Difference from Best Baseline (sec)")+
+        labs(title="Post Test 1")+
+        theme_classic()+
+        theme(legend.position = "none")+
+        theme(plot.title = element_text(hjust = 0.5)
+                               )
+
+Plot_TimeDiffPT1
+
+ggsave(plot = Plot_Time, "Figures/PT1_TimeDiff.pdf", device = "pdf")
+
+###### POST TEST 2 ######
+Plot_TimeDiffPT2 <- PassFail3 %>% 
+  group_by(Submission) %>% 
+  ggplot(aes(x=Submission, y=PT2_TimeDiff, colour=Submission, shape = Submission))+
+        geom_point(stat="identity", width=0.5, position = "jitter")+
+        geom_hline(yintercept=0, linetype="solid", 
+                color = "black", size=0.5)+
+        ylim(c(-20,20))+
+        xlab("Submission type")+
+        ylab ("Time Difference from Best Baseline (sec)")+
+        labs(title="Post Test 2")+
+        theme_classic()+
+        theme(legend.position = "none")+
+        theme(plot.title = element_text(hjust = 0.5)
+                        )
+
+Plot_TimeDiffPT2
+
+ggsave(plot = Plot_Time, "Figures/PT2_TimeDiff.pdf", device = "pdf")
+
+```
+
+# Stats (Chi square to see if Choke group's pass fail ratio is different from non-choke group's pass fail ratio)
+
+```{r}
+#POST INJURY TEST 1
+
+PT1Chi <- PassFail3 %>% 
+  select(Submission,
+         PT1PassFail)
+
+# Make sure that Submission and PT1PassFail factors.
+# Note that this time, we are not computing frequencies, rather leaving the data as Submission and PT1PassFail for each individual. The chi square script will compute the frequencies from that.
+PT1Chi$Submission <- as.factor(PT1Chi$Submission)
+PT1Chi$PT1PassFail <- as.factor(PT1Chi$PT1PassFail)
+
+# PT1Chi
+
+# Create a dataframe for the chi square script to read. This is where R computes frequencies that the chi square script reads from. You'll see the contingency table pop up. The numbers match the frequencies computed above.
+
+attach(PT1Chi)
+PT1ChiNew <- table(Submission, PT1PassFail)
+ftable(PT1ChiNew)
+
+# Run the chi square test 
+
+PT1ChiTest <-chisq.test(PT1Chi$Submission, PT1Chi$PT1PassFail, correct=FALSE)
+
+sink("Stats/PostInjuryTest1_Chi.text") # open the text for saving
+print(PT1ChiTest)
+sink(file = NULL)
+
+
+#POST INJURY TEST 2
+
+PT2Chi <- PassFail3 %>% 
+  select(Submission,
+         PT2PassFail)
+
+# Make sure that Submission and PT2PassFail factors.
+# Note that this time, we are not computing frequencies, rather leaving the data as Submission and PT2PassFail for each individual. The chi square script will compute the frequencies from that.
+PT2Chi$Submission <- as.factor(PT2Chi$Submission)
+PT2Chi$PT2PassFail <- as.factor(PT2Chi$PT2PassFail)
+
+# PT2Chi
+
+# Create a dataframe for the chi square script to read. This is where R computes frequencies that the chi square script reads from. You'll see the contingency table pop up. The numbers match the frequencies computed above.
+
+attach(PT2Chi)
+PT2ChiNew <- table(Submission, PT2PassFail)
+ftable(PT2ChiNew)
+
+# Run the chi square test 
+
+PT2ChiTest <-chisq.test(PT2Chi$Submission, PT2Chi$PT2PassFail, correct=FALSE)
+
+sink("Stats/PostInjuryTest2_Chi.text") # open the text for saving
+print(PT2ChiTest)
+sink(file = NULL)
+
+```
+```{r}
+# Visualize chi squares
+
+PT1PassFail_summary_wide <- PT1PassFail_summary %>% 
+    pivot_wider(names_from = "PT1PassFail",
+              values_from = "n")
+
+PT1PassFail_summary_wide2 <- PT1PassFail_summary_wide %>% 
+ select(!"Submission")
+
+# Graph
+pdf("Figures/PT1_BalloonPlot1.pdf") # open the pdf for saving
+balloonplot(PT1PassFail_summary$Submission, PT1PassFail_summary$PT1PassFail, PT1PassFail_summary$n) 
+dev.off() # close the pdf
+
+# Convert the data as a table
+dt <- as.table(as.matrix(PT1PassFail_summary_wide2))
+# Graph
+pdf("Figures/PT1_BalloonPlot2.pdf") # open the pdf for saving
+balloonplot(t(dt), 
+            main ="Post-Injury Test 1 \n Pass/Fail by Submission Type", 
+            xlab ="", 
+            ylab="Submission Type",
+            label = TRUE, show.margins = FALSE) # label = TRUE adds the values to the dots
+dev.off() # close the pdf
+
+
+# Post Injury Test 2
+
+PT2PassFail_summary_wide <- PT2PassFail_summary %>% 
+    pivot_wider(names_from = "PT2PassFail",
+              values_from = "n")
+
+PT2PassFail_summary_wide2 <- PT2PassFail_summary_wide %>% 
+ select(!"Submission")
+
+# Graph
+pdf("Figures/PT2_BalloonPlot1.pdf") # open the pdf for saving
+balloonplot(PT2PassFail_summary$Submission, PT2PassFail_summary$PT2PassFail, PT2PassFail_summary$n) 
+dev.off() # close the pdf
+
+# Convert the data as a table
+dt <- as.table(as.matrix(PT2PassFail_summary_wide2))
+# Graph
+pdf("Figures/PT2_BalloonPlot2.pdf") # open the pdf for saving
+balloonplot(t(dt), 
+            main ="Post-Injury Test 2 \n Pass/Fail by Submission Type", 
+            xlab ="", 
+            ylab="Submission Type",
+            label = TRUE, show.margins = FALSE) # label = TRUE adds the values to the dots
+dev.off() # close the pdf
+```
+```{r}
+
+# Take out errors as part of the fail factor. See if the RT is slower for Choke vs Non Choke
+
+# FOR THIS ANALYSIS WE ONLY CARE ABOUT TIME
+
+PassFailNew <- PassFail1 %>% 
+  mutate(PT1PassFailTime = ifelse(PT1ResultTime > 0, "Fail", "Pass"),
+         PT2PassFailTime = ifelse(PT2ResultTime > 0, "Fail", "Pass")
+         )
+
+PT1PassFail_summary_New <- PassFailNew %>% 
+  group_by(Submission) %>% 
+  count(PT1PassFailTime)
+
+PT2PassFail_summary_New <- PassFailNew %>% 
+  group_by(Submission) %>% 
+  count(PT2PassFailTime)
+
+
+
+```
+
+# Visualize: Scatter plot with times for Choke vs non choke
+```{r}
+PT1_Scatterplot <- PassFail1 %>% 
+ggplot(aes(x=Submission, y=PT1_TimeDiff, color = Submission)) +
+  #geom_line(aes(group = Submission)) +
+  geom_jitter(shape = Submission, size = 2, position = "jitter")+
+  scale_shape_manual(values = c(1, 4))+
+  geom_hline(yintercept=0, linetype="solid", 
+                color = "black", size=0.5)+
+  geom_hline(yintercept=1, linetype="dotted", 
+                color = "black", size=0.5)+
+  ylim(c(-20,20))+
+  labs(x="Submission type", y="Time difference (Post-Test - Baseline), in seconds") +
+  ggtitle("Post-Test 1")+
+   theme_classic()+
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+PT1_Scatterplot
+ggsave(plot = PT1_Scatterplot, "Figures/PT1_Scatterplot.pdf", device = "pdf")
+
+PT2_Scatterplot <- PassFail1 %>% 
+ggplot(aes(x=Submission, y=PT2_TimeDiff, color = Submission)) +
+  #geom_line(aes(group = Submission)) +
+  geom_jitter(shape = Submission, size = 2, position = "jitter")+
+  scale_shape_manual(values = c(1, 4))+
+  geom_hline(yintercept=0, linetype="solid", 
+                color = "black", size=0.5)+
+  geom_hline(yintercept=1, linetype="dotted", 
+                color = "black", size=0.5)+
+  ylim(c(-20,20))+
+  labs(x="Submission type", y="") +
+  ggtitle("Post-Test 2")+
+  theme_classic()+
+  theme(legend.position = "none")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+PT2_Scatterplot
+ggsave(plot = PT2_Scatterplot, "Figures/PT2_Scatterplot.pdf", device = "pdf")
+
+Figure3 <- ggarrange(PT1_Scatterplot,PT2_Scatterplot,
+                     lables = c("A", "B"),
+                     ncol = 2, nrow = 1)
+Figure3
+
+ggexport(Figure3, filename = "Figures/Figure3.pdf")
+```
+
+# PLOT PT1 - Baseline. 
+```{r}
+
+# CREATE LONG DATA, PLOTTING PT1 CHOKE, THEN PT1 NON CHOKE, THEN PT2 CHOKE, THEN PT2 NON-CHOKE
+
+
+#### PT1 ########
+PT1_Only <- PassFail3 %>% 
+  dplyr::select(Internal.Id,
+          Submission,
+          Gender,
+          BestBaselineTime,
+          PT1_TotalTime)
+
+
+PT1_long <- PT1_Only %>% 
+  pivot_longer(cols = c(BestBaselineTime, PT1_TotalTime), 
+               names_to = "Test", 
+               values_to = "Time")
+
+# plot PT1 CHOKE
+PT1_Baseline_Choke <- PT1_long %>% 
+  filter(Submission == "Choke") %>% 
+  ggplot(aes(x = Test, y=Time)) + 
+  labs(x="", y="Reaction time (seconds)") +
+  geom_point(colour = "coral", alpha=.5) +
+  geom_line(aes(group=Internal.Id), colour = "coral", alpha=.5) +
+  ylim(c(0,80))+
+  ggtitle("CHOKE") +
+  theme(plot.title = element_text(hjust = 0.5))
+  PT1_Baseline_Choke
+  
+  # plot PT1 NON-CHOKE
+PT1_Baseline_NonChoke <- PT1_long %>% 
+  filter(Submission == "Non-Choke") %>% 
+  ggplot(aes(x = Test, y=Time)) +
+  labs(x="", y="") +
+  geom_point(colour = "deepskyblue3", alpha=.5) +
+  geom_line(aes(group=Internal.Id), colour = "deepskyblue3", alpha=.5)+
+  ylim(c(0,80))+
+  ggtitle("NON-CHOKE") +
+  theme(plot.title = element_text(hjust = 0.5))
+  PT1_Baseline_NonChoke
+  
+  
+  ## PT2 CHOKE
+  
+  PT2_Only <- PassFail3 %>% 
+  dplyr::select(Internal.Id,
+          Submission,
+          Gender,
+          BestBaselineTime,
+          PT2_TotalTime)
+
+
+PT2_long <- PT2_Only %>% 
+  pivot_longer(cols = c(BestBaselineTime, PT2_TotalTime), 
+               names_to = "Test", 
+               values_to = "Time")
+
+# plot PT2 CHOKE
+PT2_Baseline_Choke <- PT2_long %>% 
+  filter(Submission == "Choke") %>% 
+  ggplot(aes(x = Test, y=Time)) + 
+  ylim(c(0,80))+
+  labs(x="Test", y="Reaction time (seconds)") +
+  geom_point(colour = "coral", alpha=.5) +
+  geom_line(aes(group=Internal.Id), colour = "coral", alpha=.5) +
+  ggtitle("") +
+  theme(plot.title = element_text(hjust = 0.5))
+  PT2_Baseline_Choke
+  
+  
+  # plot PT2 NON-CHOKE
+PT2_Baseline_NonChoke <- PT2_long %>% 
+  filter(Submission == "Non-Choke") %>% 
+  ggplot(aes(x = Test, y=Time)) +
+  ylim(c(0,80))+
+  labs(x="Test", y="") +
+  geom_point(colour = "deepskyblue3", alpha=.5) +
+  geom_line(aes(group=Internal.Id), colour = "deepskyblue3", alpha=.5)+
+  ggtitle("") +
+  theme(plot.title = element_text(hjust = 0.5))
+  PT2_Baseline_NonChoke
+
+  Figure2 <- ggarrange(PT1_Baseline_Choke,PT1_Baseline_NonChoke,
+                       PT2_Baseline_Choke, PT2_Baseline_NonChoke,
+                     lables = c("A", "B", "C", "D"),
+                     ncol = 2, nrow = 2)
+Figure2
+
+ggexport(Figure2, filename = "Figures/FigureX.pdf")
+```
+
+## t-tests on RTs
+
+```{r}
+
+# T TESTS CHOKE VS NON CHOKE
+## BB = Best Baseline, PT1 = POST INJURY TEST 1, PT2 = POST INJURY TEST 2, C = Choke, NC = NonChoke
+
+######### First make sure they were equal prior to sparring by doing a ttest to compare best baselines ######
+
+ttest_BB_CvNC <-t.test(BestBaselineTime ~ Submission, var.equal=TRUE, data = PassFail3)
+
+ttest_BB_CvNC_p <- ttest_BB_CvNC$p.value # grab the p-value!
+ttest_BB_CvNC_p <- round(ttest_BB_CvNC_p, 3)
+print(ttest_BB_CvNC)
+
+#Was CHOKE slower than NON CHOKE on PT1?
+ttest_PT1_CvNC <-t.test(PT1_TotalTime ~ Submission, var.equal=TRUE, data = PassFail3)
+
+ttest_PT1_CvNC_p <- ttest_PT1_CvNC$p.value # grab the p-value!
+ttest_PT1_CvNC_p <- round(ttest_PT1_CvNC_p, 3)
+print(ttest_PT1_CvNC)
+
+#Was CHOKE slower than NON CHOKE on PT2?
+ttest_PT2_CvNC <-t.test(PT2_TotalTime ~ Submission, var.equal=TRUE, data = PassFail3)
+
+ttest_PT2_CvNC_p <- ttest_PT2_CvNC$p.value # grab the p-value!
+ttest_PT2_CvNC_p <- round(ttest_PT2_CvNC_p, 3)
+print(ttest_PT2_CvNC)
+
+########## Let's use difference scores that individual differences are taken into account##########
+
+# Did choke have more times that slowed down at PT1 relative to baseline than Non Choke? 
+ttest_PT1TimeDiff_CvNC <-t.test(PT1_TimeDiff ~ Submission, var.equal=TRUE, data = PassFail3)
+
+ttest_PT1TimeDiff_CvNC_p <- ttest_PT1TimeDiff_CvNC$p.value # grab the p-value!
+ttest_PT1TimeDiff_CvNC_p <- round(ttest_PT1TimeDiff_CvNC_p, 3)
+print(ttest_PT1TimeDiff_CvNC)
+
+
+# Did choke have more times that slowed down at PT2 relative to baseline than Non Choke? 
+ttest_PT2TimeDiff_CvNC <-t.test(PT2_TimeDiff ~ Submission, var.equal=TRUE, data = PassFail3)
+
+ttest_PT2TimeDiff_CvNC_p <- ttest_PT2TimeDiff_CvNC$p.value # grab the p-value!
+ttest_PT2TimeDiff_CvNC_p <- round(ttest_PT2TimeDiff_CvNC_p, 3)
+print(ttest_PT2TimeDiff_CvNC)
+
+
+####### IF THERE IS NO DIFFERENCE BETWEEN CHOKE AND NON CHOKE, WE CAN TEST TO SEE IF THE GROUP AS A WHOLE SLOWED DOWN AT PT1 or PT2, OR WE CAN DO AN ANOVA (2 Submission x 3 Test) #####
+
+
+
+GroupAnalyses <- PassFail3 %>% 
+   dplyr::select(Internal.Id,
+          Submission,
+          BestBaselineTime,
+          PT1_TotalTime,
+          PT2_TotalTime,
+          PT1_TimeDiff,
+          PT2_TimeDiff
+          )
+
+GroupAnalyses_long <- GroupAnalyses %>% 
+  pivot_longer(cols = c(BestBaselineTime, PT1_TotalTime, PT2_TotalTime, PT1_TimeDiff, PT2_TimeDiff), 
+               names_to = "Test", 
+               values_to = "Time")
+
+## TTEST Best Baseline vs PT1: The script will do this for everyone, then for Choke and non choke separately. 
+
+# Everyone
+#Filter to use Best Baseline vs PT1 only
+
+Group_BBvsPT1 <- GroupAnalyses_long %>% 
+  filter(Test == "BestBaselineTime" | Test == "PT1_TotalTime")
+
+ttest_Group_BBvsPT1 <-t.test(Time ~ Test, var.equal=TRUE, data = Group_BBvsPT1)
+
+ttest_Group_BBvsPT1_p <- ttest_Group_BBvsPT1$p.value # grab the p-value
+ttest_Group_BBvsPT1_p <- round(ttest_Group_BBvsPT1_p, 3)
+print(ttest_Group_BBvsPT1)
+
+#Filter to use Best Baseline vs PT2 only
+
+Group_BBvsPT2 <- GroupAnalyses_long %>% 
+  filter(Test == "BestBaselineTime" | Test == "PT2_TotalTime")
+
+ttest_Group_BBvsPT2 <-t.test(Time ~ Test, var.equal=TRUE, data = Group_BBvsPT2)
+
+ttest_Group_BBvsPT2_p <- ttest_Group_BBvsPT2$p.value # grab the p-value!
+ttest_Group_BBvsPT2_p <- round(ttest_Group_BBvsPT2_p, 3)
+print(ttest_Group_BBvsPT2)
+
+# Did they show greater change from Baseline to PT1 than Baseline to PT2?
+#Filter to use PT1_TimeDiff vs PT2_TimeDiff only
+
+Group_PT1vsPT2TimeDiff <- GroupAnalyses_long %>% 
+  filter(Test == "PT1_TimeDiff" | Test == "PT2_TimeDiff")
+
+ttest_Group_PT1vsPT2TimeDiff <-t.test(Time ~ Test, var.equal=TRUE, data = Group_PT1vsPT2TimeDiff)
+
+ttest_Group_PT1vsPT2TimeDiff_p <- ttest_Group_PT1vsPT2TimeDiff$p.value # grab the p-value 
+ttest_Group_PT1vsPT2TimeDiff_p <- round(ttest_Group_PT1vsPT2TimeDiff_p, 3)
+print(ttest_Group_PT1vsPT2TimeDiff)
+
+```
+
+
+

@@ -1,0 +1,6 @@
+
+	Pearson's Chi-squared test
+
+data:  PT2Chi$Submission and PT2Chi$PT2PassFail
+X-squared = 2.6764, df = 1, p-value = 0.1018
+
