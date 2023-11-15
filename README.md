@@ -25,9 +25,9 @@ File name (.csv)	and variables included
 
 CHOKE_1_Data_Clean	
 
-   * Internal Id: random ID.
+   • Internal Id: random ID.
    
-   * First name: Anonymized first name.
+   • First name: Anonymized first name.
    
    •	Last name: Anonymized last name.
    
