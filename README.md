@@ -11,7 +11,7 @@ CHOKE folder contains:
 
  /CHOKE 1.0.rmd
  
- /Data_In
+ /Data_In/CHOKE_1_Data_Clean
  
  /Data_Out
  
